@@ -1,0 +1,43 @@
+name: Autobuild Plugin Zip
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract plugin version
+        id: get_version
+        run: |
+          version=$(awk -F': ' '/^\s*\* Version:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' auto-login-with-cloudflare.php)
+          echo "PLUGIN_VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Prepare zip folder
+        run: |
+          mkdir -p dist/auto-login-with-cloudflare
+          shopt -s extglob
+          cp -r !(dist|.git|.github) dist/auto-login-with-cloudflare/
+
+      - name: Create zip
+        run: |
+          cd dist
+          zip -r ../auto-login-with-cloudflare-${{ env.PLUGIN_VERSION }}.zip auto-login-with-cloudflare
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.PLUGIN_VERSION }}
+          name: Autobuild for v${{ env.PLUGIN_VERSION }}
+          body: |
+            This is an automated build (unstable, for testing only).
+          prerelease: true
+          files: auto-login-with-cloudflare-${{ env.PLUGIN_VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

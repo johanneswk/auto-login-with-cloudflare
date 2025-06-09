@@ -1,9 +1,0 @@
-assets/
-languages/
-vendor/php-jwt/src/
-vendor/php-jwt/LICENSE
-vendor/php-jwt/README.md
-LICENSE
-readme.txt
-settings.php
-auto-login-with-cloudflare.php

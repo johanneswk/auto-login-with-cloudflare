@@ -1,39 +1,39 @@
 <?php
 
 /**
- * @link               https://github.com/kanru/auto-login-with-cloudflare
+ * @link               https://github.com/johanneswk/auto-login-with-cloudflare
  * @since              0.9.0
- * @package            Wpcfajal
+ * @package            AutoLoginWithCloudflare
  *
  * @wordpress-plugin
  * Plugin Name:        Auto Login with Cloudflare
- * Plugin URI:         https://github.com/kanru/auto-login-with-cloudflare
+ * Plugin URI:         https://github.com/johanneswk/auto-login-with-cloudflare
  * Description:        Allow login to Wordpress when using Cloudflare Access.
- * Version:            1.1.4
- * Author:             Kan-Ru Chen
- * Author URI:         https://github.com/kanru
+ * Version:            2.0.0
+ * Author:             Johannes Kistemaker
+ * Author URI:         https://github.com/johanneswk/
  * License:            GPL-2.0+
  * License URI:        http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:        auto-login-with-cloudflare
  * Domain Path:        /languages
  */
 
-namespace Wpcfajal;
+namespace AutoLoginWithCloudflare;
 
 // If this file is called directly, abort.
 if (!defined('WPINC')) {
     die;
 }
 
-require_once __DIR__ . '/vendor/php-jwt/src/BeforeValidException.php';
-require_once __DIR__ . '/vendor/php-jwt/src/ExpiredException.php';
-require_once __DIR__ . '/vendor/php-jwt/src/SignatureInvalidException.php';
-require_once __DIR__ . '/vendor/php-jwt/src/JWK.php';
-require_once __DIR__ . '/vendor/php-jwt/src/JWT.php';
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
 require_once __DIR__ . '/settings.php';
 
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+
 
 // define('WP_CF_ACCESS_AUTH_DOMAIN', '');
 // define('WP_CF_ACCESS_JWT_AUD', '');
@@ -41,14 +41,14 @@ use Firebase\JWT\JWT;
 
 define('WP_CF_ACCESS_JWT_ALG', ['RS256']);
 define('WP_CF_ACCESS_RETRY', 1);
-define('WP_CF_ACCESS_CACHE_KEY', 'wpcfajal_jwks');
+define('WP_CF_ACCESS_CACHE_KEY', 'AutoLoginWithCloudflare_jwks');
 
 function get_auth_domain()
 {
     if (defined('WP_CF_ACCESS_AUTH_DOMAIN')) {
         return constant('WP_CF_ACCESS_AUTH_DOMAIN');
     }
-    return get_option('wpcfajal_auth_domain');
+    return get_option('AutoLoginWithCloudflare_auth_domain');
 }
 
 function get_jwt_aud()
@@ -56,7 +56,7 @@ function get_jwt_aud()
     if (defined('WP_CF_ACCESS_JWT_AUD')) {
         return constant('WP_CF_ACCESS_JWT_AUD');
     }
-    return get_option('wpcfajal_aud');
+    return get_option('AutoLoginWithCloudflare_aud');
 }
 
 function get_redirect_login()
@@ -64,21 +64,20 @@ function get_redirect_login()
     if (defined('WP_CF_ACCESS_REDIRECT_LOGIN')) {
         return constant('WP_CF_ACCESS_REDIRECT_LOGIN');
     }
-    return get_option('wpcfajal_redirect_login_page');
+    return get_option('AutoLoginWithCloudflare_redirect_login_page');
 }
 
 function refresh_keys()
 {
     $jwks = null;
-    try {
-        $response = wp_remote_get(esc_url_raw('https://' . get_auth_domain() . '/cdn-cgi/access/certs'));
-        $jwks = json_decode(wp_remote_retrieve_body($response), true);
-    } catch (\Exception $e) {
+    $response = wp_remote_get(esc_url_raw('https://' . get_auth_domain() . '/cdn-cgi/access/certs'));
+    if (is_wp_error($response)) {
         $jwks = null;
-    } finally {
-        wp_cache_set(WP_CF_ACCESS_CACHE_KEY, $jwks);
-        return $jwks;
+    } else {
+        $jwks = json_decode(wp_remote_retrieve_body($response), true);
     }
+    wp_cache_set(WP_CF_ACCESS_CACHE_KEY, $jwks);
+    return $jwks;
 }
 
 function verify_aud($aud)
@@ -115,8 +114,24 @@ function login()
         while (!$recognized && $retry_count < WP_CF_ACCESS_RETRY) {
             try {
                 JWT::$leeway = 60;
-                $jwt_decoded = JWT::decode($cf_auth_jwt, JWK::parseKeySet($jwks), WP_CF_ACCESS_JWT_ALG);
-                if (isset($jwt_decoded->aud) && verify_aud($jwt_decoded->aud)) {
+                $keys = JWK::parseKeySet($jwks);
+                // Extract the kid from the JWT header
+                $jwt_header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], explode('.', $cf_auth_jwt)[0])), true);
+                $kid = $jwt_header['kid'] ?? null;
+                if ($kid && isset($keys[$kid])) {
+                    $jwt_decoded = JWT::decode($cf_auth_jwt, $keys[$kid]);
+                } else {
+                    // fallback: try all keys
+                    foreach ($keys as $key) {
+                        try {
+                            $jwt_decoded = JWT::decode($cf_auth_jwt, $key);
+                            break;
+                        } catch (\Exception $e) {
+                            $jwt_decoded = null;
+                        }
+                    }
+                }
+                if (isset($jwt_decoded) && isset($jwt_decoded->aud) && verify_aud($jwt_decoded->aud)) {
                     if (isset($jwt_decoded->email)) {
                         $current_user = wp_get_current_user();
                         if ($current_user->exists() && $current_user->user_email == $jwt_decoded->email) {
@@ -193,16 +208,15 @@ add_action('plugins_loaded', __NAMESPACE__ . '\\login');
 add_action('login_form_login', __NAMESPACE__ . '\\login_redirect');
 add_action('wp_logout', __NAMESPACE__ . '\\logout_redirect');
 
-function wpcfajal_load_plugin_textdomain()
+function AutoLoginWithCloudflare_load_plugin_textdomain()
 {
     load_plugin_textdomain('auto-login-with-cloudflare', false, basename(dirname(__FILE__)) . '/languages/');
 }
-add_action('plugins_loaded', __NAMESPACE__ . '\\wpcfajal_load_plugin_textdomain');
+add_action('plugins_loaded', __NAMESPACE__ . '\\AutoLoginWithCloudflare_load_plugin_textdomain');
 
 function plugin_action_links($actions)
 {
-    $actions[] = '<a href="' . esc_url(get_admin_url(null, 'options-general.php?page=wpcfajal')) . '">' . __('Settings', 'auto-login-with-cloudflare') . '</a>';
-    $actions[] = '<a href="https://www.buymeacoffee.com/kanru" target="_blank">' . __('Buy me a coffee', 'auto-login-with-cloudflare') . '</a>';
+    $actions[] = '<a href="' . esc_url(get_admin_url(null, 'options-general.php?page=AutoLoginWithCloudflare')) . '">' . __('Settings', 'auto-login-with-cloudflare') . '</a>';
     return $actions;
 }
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), __NAMESPACE__ . '\\plugin_action_links');

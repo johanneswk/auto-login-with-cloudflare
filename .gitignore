@@ -1,3 +1,5 @@
 /.vscode
 languages/*.mo
 languages/*.po~
+.DS_Store
+/vendor/.DS_Store
