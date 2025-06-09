@@ -2,7 +2,7 @@
 
 **Contributors:** [johanneswk](https://github.com/johanneswk), [kanru](https://github.com/kanru)  
 **Tags:** cloudflare, jwt, login, sso, composer  
-**Requires at least:** WordPress 5.0  
+**Requires at least:** WordPress 6.3 (full PHP 8.0 support)
 **Tested up to:** 6.8  
 **Requires PHP:** 8.0  
 **Stable tag:** 2.0.1  
