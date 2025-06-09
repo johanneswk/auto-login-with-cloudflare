@@ -5,7 +5,7 @@
 **Requires at least:** WordPress 5.0  
 **Tested up to:** 6.8  
 **Requires PHP:** 8.0  
-**Stable tag:** 2.0.0  
+**Stable tag:** 2.0.1  
 **License:** GPL-2.0+  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -54,6 +54,10 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 ---
 
 ## Changelog
+
+### 2.0.1
+- Security: Improved JWT validation by checking the `iss` (issuer) claim against your Cloudflare Access team domain.
+- Security: Now supports JWTs provided via the `Cf-Access-Jwt-Assertion` HTTP header as well as the `CF_Authorization` cookie, following Cloudflare best practices.
 
 ### 2.0.0
 - This release marks the start of maintenance under a new fork by Johannes Kistemaker, based on the original plugin by Kan-Ru Chen.

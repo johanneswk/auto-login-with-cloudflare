@@ -9,7 +9,7 @@
  * Plugin Name:        Auto Login with Cloudflare
  * Plugin URI:         https://github.com/johanneswk/auto-login-with-cloudflare
  * Description:        Allow login to Wordpress when using Cloudflare Access.
- * Version:            2.0.0
+ * Version:            2.0.1
  * Author:             Johannes Kistemaker
  * Author URI:         https://github.com/johanneswk/
  * License:            GPL-2.0+
@@ -109,8 +109,13 @@ function login()
     $user_id = 0;
     $retry_count = 0;
 
-    if (isset($_COOKIE["CF_Authorization"]) && $_COOKIE["CF_Authorization"] != "") {
-        $cf_auth_jwt = $_COOKIE["CF_Authorization"];
+    // Get JWT from cookie or header
+    $cf_auth_jwt = $_COOKIE["CF_Authorization"] ?? null;
+    if (!$cf_auth_jwt && isset($_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'])) {
+        $cf_auth_jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'];
+    }
+
+    if (isset($cf_auth_jwt) && $cf_auth_jwt != "") {
         while (!$recognized && $retry_count < WP_CF_ACCESS_RETRY) {
             try {
                 JWT::$leeway = 60;
@@ -131,7 +136,11 @@ function login()
                         }
                     }
                 }
-                if (isset($jwt_decoded) && isset($jwt_decoded->aud) && verify_aud($jwt_decoded->aud)) {
+                if (
+                    isset($jwt_decoded) &&
+                    isset($jwt_decoded->aud) && verify_aud($jwt_decoded->aud) &&
+                    isset($jwt_decoded->iss) && $jwt_decoded->iss === 'https://' . get_auth_domain()
+                ) {
                     if (isset($jwt_decoded->email)) {
                         $current_user = wp_get_current_user();
                         if ($current_user->exists() && $current_user->user_email == $jwt_decoded->email) {
