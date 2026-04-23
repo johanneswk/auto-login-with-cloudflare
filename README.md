@@ -54,6 +54,8 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 ---
 
 ## Changelog
+### 2.0.2
+- Fix JWKS validation and error handling in refresh_keys() and login() functions to prevent TypeError and improve debugging.
 
 ### 2.0.1
 - Security: Improved JWT validation by checking the `iss` (issuer) claim against your Cloudflare Access team domain.

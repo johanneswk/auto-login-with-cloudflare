@@ -71,11 +71,20 @@ function refresh_keys()
 {
     $jwks = null;
     $response = wp_remote_get(esc_url_raw('https://' . get_auth_domain() . '/cdn-cgi/access/certs'));
+
     if (is_wp_error($response)) {
-        $jwks = null;
-    } else {
-        $jwks = json_decode(wp_remote_retrieve_body($response), true);
+        error_log('AutoLoginWithCloudflare: Failed to fetch JWKS - ' . $response->get_error_message());
+        return null;
     }
+
+    $body = wp_remote_retrieve_body($response);
+    $jwks = json_decode($body, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($jwks)) {
+        error_log('AutoLoginWithCloudflare: Invalid JWKS response - ' . json_last_error_msg());
+        return null;
+    }
+
     wp_cache_set(WP_CF_ACCESS_CACHE_KEY, $jwks);
     return $jwks;
 }
@@ -102,6 +111,11 @@ function login()
     $jwks = wp_cache_get(WP_CF_ACCESS_CACHE_KEY);
     if (!$jwks) {
         $jwks = refresh_keys();
+    }
+
+    if (!$jwks) {
+        error_log('AutoLoginWithCloudflare: Unable to retrieve JWKS. Aborting login process.');
+        return;
     }
 
     $recognized = false;
@@ -155,6 +169,10 @@ function login()
                 }
             } catch (\UnexpectedValueException $e) {
                 $jwks = refresh_keys();
+                if (!$jwks) {
+                    error_log('AutoLoginWithCloudflare: Failed to refresh JWKS during retry.');
+                    break;
+                }
             }
             $retry_count++;
         }
