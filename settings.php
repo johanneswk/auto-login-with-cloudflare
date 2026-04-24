@@ -63,80 +63,64 @@ function section_general_callback($args)
 {
 }
 
+function render_text_field($name, $constant, $option, $args)
+{
+    $value = defined($constant) ? constant($constant) : get_option($option);
+    $disabled = defined($constant);
+    ?>
+    <input name="<?php echo esc_attr($name); ?>" type="text" id="<?php echo esc_attr($args['label_for']); ?>" value="<?php echo esc_attr($value); ?>" class="regular-text" <?php echo $disabled ? 'disabled' : ''; ?>>
+    <?php
+}
+
+function render_checkbox_field($name, $constant, $option, $args)
+{
+    $value = defined($constant) ? constant($constant) : get_option($option);
+    $disabled = defined($constant);
+    ?>
+    <label for="<?php echo esc_attr($args['label_for']); ?>">
+        <input name="<?php echo esc_attr($name); ?>" type="checkbox" id="<?php echo esc_attr($args['label_for']); ?>" <?php echo $value ? 'checked' : ''; ?> <?php echo $disabled ? 'disabled' : ''; ?>>
+        <?php echo __('redirect to Cloudflare Access', 'auto-login-with-cloudflare'); ?>
+    </label>
+    <?php
+}
+
 function field_auth_domain_cb($args)
 {
-    if (defined('WP_CF_ACCESS_AUTH_DOMAIN')) {
-        $auth_domain = constant('WP_CF_ACCESS_AUTH_DOMAIN');
-        $disabled = true;
-    } else {
-        $auth_domain = get_option('AutoLoginWithCloudflare_auth_domain');
-        $disabled = false;
-    }
-?>
-    <input name="AutoLoginWithCloudflare_auth_domain" type="text" id="<?php echo $args['label_for'] ?>" value="<?php echo esc_html_e($auth_domain) ?>" class="regular-text" <?php echo $disabled ? "disabled" : "" ?>>
-<?php
+    render_text_field('AutoLoginWithCloudflare_auth_domain', 'WP_CF_ACCESS_AUTH_DOMAIN', 'AutoLoginWithCloudflare_auth_domain', $args);
 }
 
 function field_aud_cb($args)
 {
-    if (defined('WP_CF_ACCESS_JWT_AUD')) {
-        $aud = constant('WP_CF_ACCESS_JWT_AUD');
-        $disabled = true;
-    } else {
-        $aud = get_option('AutoLoginWithCloudflare_aud');
-        $disabled = false;
-    }
-?>
-    <input name="AutoLoginWithCloudflare_aud" type="text" id="<?php echo $args['label_for'] ?>" value="<?php echo esc_html_e($aud) ?>" class="regular-text" <?php echo $disabled ? "disabled" : "" ?>>
-<?php
+    render_text_field('AutoLoginWithCloudflare_aud', 'WP_CF_ACCESS_JWT_AUD', 'AutoLoginWithCloudflare_aud', $args);
 }
 
 function field_redirect_login_page_cb($args)
 {
-    if (defined('WP_CF_ACCESS_REDIRECT_LOGIN')) {
-        $redirect_login_page = constant('WP_CF_ACCESS_REDIRECT_LOGIN');
-        $disabled = true;
-    } else {
-        $redirect_login_page = get_option('AutoLoginWithCloudflare_redirect_login_page');
-        $disabled = false;
-    }
-?>
-    <label for="<?php echo $args['label_for'] ?>">
-        <input name="AutoLoginWithCloudflare_redirect_login_page" type="checkbox" id="<?php echo $args['label_for'] ?>" <?php echo $redirect_login_page ? "checked" : "" ?> <?php echo $disabled ? "disabled" : "" ?>>
-        <?php echo __('redirect to Cloudflare Access', 'auto-login-with-cloudflare') ?>
-    </label>
-<?php
+    render_checkbox_field('AutoLoginWithCloudflare_redirect_login_page', 'WP_CF_ACCESS_REDIRECT_LOGIN', 'AutoLoginWithCloudflare_redirect_login_page', $args);
 }
 
-function settings_page()
-{
+add_action('admin_menu', function () {
     add_options_page(
         __('Auto Login with Cloudflare', 'auto-login-with-cloudflare'),
         __('Auto Login with Cloudflare', 'auto-login-with-cloudflare'),
         'manage_options',
         'AutoLoginWithCloudflare',
-        __NAMESPACE__ . '\\settings_page_html'
-    );
-}
-add_action('admin_menu', __NAMESPACE__ . '\\settings_page');
-
-function settings_page_html()
-{
-    if (!current_user_can('manage_options')) {
-        return;
-    }
-?>
-    <div class="wrap">
-        <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-        <form action="options.php" method="post">
-            <?php
-
-            settings_fields('AutoLoginWithCloudflare');
-            do_settings_sections('AutoLoginWithCloudflare');
-            submit_button(__('Save Settings', 'auto-login-with-cloudflare'));
-
+        function () {
+            if (!current_user_can('manage_options')) {
+                return;
+            }
             ?>
-        </form>
-    </div>
-<?php
-}
+            <div class="wrap">
+                <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+                <form action="options.php" method="post">
+                    <?php
+                    settings_fields('AutoLoginWithCloudflare');
+                    do_settings_sections('AutoLoginWithCloudflare');
+                    submit_button(__('Save Settings', 'auto-login-with-cloudflare'));
+                    ?>
+                </form>
+            </div>
+            <?php
+        }
+    );
+});

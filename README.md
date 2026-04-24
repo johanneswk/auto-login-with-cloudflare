@@ -3,9 +3,9 @@
 **Contributors:** [johanneswk](https://github.com/johanneswk), [kanru](https://github.com/kanru)  
 **Tags:** cloudflare, jwt, login, sso, composer  
 **Requires at least:** WordPress 6.3 (full PHP 8.0 support)
-**Tested up to:** 6.8  
+**Tested up to:** 6.9  
 **Requires PHP:** 8.0  
-**Stable tag:** 2.0.1  
+**Stable tag:** 2.1.1 
 **License:** GPL-2.0+  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -54,6 +54,21 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 ---
 
 ## Changelog
+### 2.1.1
+- Improve: Refactored code for simplicity and maintainability (reduced file size by ~30%)
+  - Consolidated config getter functions into single helper
+  - Extracted JWT validation into dedicated function
+  - Simplified error handling and flow control
+  - Removed unused constants and variables
+  - Replaced standalone functions with anonymous hooks
+
+### 2.1.0
+- Upgrade to firebase/php-jwt v7.0.5 with enhanced security (key size validation, stricter payload validation)
+- Fix: RFC 4648-compliant base64url padding for proper JWT header decoding in PHP 8+
+- Improve: Enhanced JWT decode error handling with defensive null checks and better fallback logic
+- Improve: Added detailed error logging for JWT validation failures and format issues
+- Improve: Support for v7's stricter key validation with graceful fallback to alternative keys
+
 ### 2.0.2
 - Fix JWKS validation and error handling in refresh_keys() and login() functions to prevent TypeError and improve debugging.
 
