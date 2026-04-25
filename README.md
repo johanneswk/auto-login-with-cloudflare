@@ -2,14 +2,14 @@
 
 **Contributors:** [johanneswk](https://github.com/johanneswk), [kanru](https://github.com/kanru)  
 **Tags:** cloudflare, jwt, login, sso, composer  
-**Requires at least:** WordPress 6.3 (full PHP 8.0 support)
+**Requires at least:** WordPress 6.3 (full PHP 8.0 support)  
 **Tested up to:** 6.9  
 **Requires PHP:** 8.0  
-**Stable tag:** 2.1.1 
+**Stable tag:** 2.1.2  
 **License:** GPL-2.0+  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.txt
 
-A simple way to allow single sign-on to your WordPress site when using Cloudflare Access. Now Composer-based and maintained.
+A simple way to allow single sign-on to your WordPress site when using Cloudflare Access.
 
 ---
 
@@ -31,6 +31,43 @@ define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
 
 ---
 
+## Screenshots
+
+### Settings Page with Debug Mode
+
+The plugin settings page allows you to configure your Cloudflare Access credentials and enable debug mode for troubleshooting:
+
+![Cloudflare Access Auto Login Settings Page](https://raw.githubusercontent.com/johanneswk/auto-login-with-cloudflare/main/assets/screenshot-settings.png)
+**Features shown:**
+- Auth domain configuration
+- Application audience (AUD) tag from Cloudflare
+- Redirect login page option
+- Debug mode toggle with real-time log display
+
+---
+
+## Logging & Debugging
+
+The plugin includes a built-in debug mode to help troubleshoot authentication issues.
+
+### Enabling Debug Mode
+
+1. Go to **Settings → Auto Login with Cloudflare**
+2. Check the **"Enable debug mode"** checkbox
+3. Click **"Save Settings"**
+
+### Viewing Logs
+
+Debug logs appear on the settings page in a **scrollable box with color-coded messages**:
+- 🔴 **Red**: Errors and failed validations
+- 🟢 **Green**: Successful login
+- 🔵 **Blue**: User already logged in
+- ⚫ **Black**: Informational messages
+
+The last 100 debug events are stored. Use the **"Clear Debug Logs"** button to reset them.
+
+---
+
 ## Frequently Asked Questions
 
 ### How do I redirect the WP login page at `/wp-login.php` to Cloudflare Access?
@@ -47,13 +84,16 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 
 ---
 
-## Screenshots
-
-1. Settings page for Cloudflare Access integration
-
----
-
 ## Changelog
+### 2.1.2
+- Feature: Add built-in debug mode with real-time log display on settings page (works independently of WordPress WP_DEBUG)
+- Security: Enforce RS256 algorithm validation to prevent algorithm downgrade attacks
+- Security: Remove unsafe fallback key loop - now requires strict kid (key ID) matching per JWT spec
+- Security: Improved JWT validation error logging for better security auditing with detailed failure reasons
+- Improve: Move login hook to `wp_loaded` for better WordPress initialization compatibility
+- Improve: Execute auth actions directly instead of deferring to separate hook (more reliable)
+- Improve: Color-coded debug logs (red for errors, green for success, blue for already logged in)
+
 ### 2.1.1
 - Improve: Refactored code for simplicity and maintainability (reduced file size by ~30%)
   - Consolidated config getter functions into single helper
