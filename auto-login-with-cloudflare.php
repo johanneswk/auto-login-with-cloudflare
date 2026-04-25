@@ -224,12 +224,19 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
 }
 
 /**
- * Called for every page after setup theme
+ * Called on wp_loaded hook to handle Cloudflare Access JWT authentication
+ * Only processes JWT validation if user is not already logged in
  */
 function login()
 {
     if (!get_auth_domain() || !get_jwt_aud()) {
         return;
+    }
+
+    // Skip processing if user is already logged in (avoid unnecessary validation on every page)
+    $current_user = wp_get_current_user();
+    if ($current_user->ID !== 0) {
+        return; // User already authenticated, no need to process JWT
     }
 
     $jwks = wp_cache_get(WP_CF_ACCESS_CACHE_KEY);
@@ -283,12 +290,6 @@ function login()
                 );
             }
             return;
-        }
-        
-        $current_user = wp_get_current_user();
-        if ($user->ID === $current_user->ID) {
-            debug_log('User already logged in as ' . $user->user_login);
-            return; // Already logged in as this user
         }
         
         wp_set_auth_cookie($user->ID);
