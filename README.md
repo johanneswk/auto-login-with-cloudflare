@@ -9,7 +9,7 @@
 **License:** GPL-2.0+  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.txt
 
-A simple way to allow single sign-on to your WordPress site when using Cloudflare Access. Now Composer-based and maintained.
+A simple way to allow single sign-on to your WordPress site when using Cloudflare Access.
 
 ---
 
@@ -28,6 +28,21 @@ define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
 ```
 
 > This plugin is not affiliated with nor developed by Cloudflare. All trademarks, service marks and company names are the property of their respective owners.
+
+---
+
+## Screenshots
+
+### Settings Page with Debug Mode
+
+The plugin settings page allows you to configure your Cloudflare Access credentials and enable debug mode for troubleshooting:
+
+![Cloudflare Access Auto Login Settings Page](https://raw.githubusercontent.com/johanneswk/auto-login-with-cloudflare/main/assets/screenshot-settings.png)
+**Features shown:**
+- Auth domain configuration
+- Application audience (AUD) tag from Cloudflare
+- Redirect login page option
+- Debug mode toggle with real-time log display
 
 ---
 
@@ -69,31 +84,15 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 
 ---
 
-## Screenshots
-
-### Settings Page with Debug Mode
-
-The plugin settings page allows you to configure your Cloudflare Access credentials and enable debug mode for troubleshooting:
-
-![Cloudflare Access Auto Login Settings Page](https://raw.githubusercontent.com/johanneswk/auto-login-with-cloudflare/main/assets/screenshot-settings.png)
-
-**Features shown:**
-- Auth domain configuration
-- Application audience (AUD) tag from Cloudflare
-- Redirect login page option
-- Debug mode toggle with real-time log display
-
----
-
 ## Changelog
 ### 2.1.2
-- **Feature**: Add built-in debug mode with real-time log display on settings page (works independently of WordPress WP_DEBUG)
-- **Security**: Enforce RS256 algorithm validation to prevent algorithm downgrade attacks
-- **Security**: Remove unsafe fallback key loop - now requires strict kid (key ID) matching per JWT spec
-- **Security**: Improved JWT validation error logging for better security auditing with detailed failure reasons
-- **Improve**: Move login hook to `wp_loaded` for better WordPress initialization compatibility
-- **Improve**: Execute auth actions directly instead of deferring to separate hook (more reliable)
-- **Improve**: Color-coded debug logs (red for errors, green for success, blue for already logged in)
+- Feature: Add built-in debug mode with real-time log display on settings page (works independently of WordPress WP_DEBUG)
+- Security: Enforce RS256 algorithm validation to prevent algorithm downgrade attacks
+- Security: Remove unsafe fallback key loop - now requires strict kid (key ID) matching per JWT spec
+- Security: Improved JWT validation error logging for better security auditing with detailed failure reasons
+- Improve: Move login hook to `wp_loaded` for better WordPress initialization compatibility
+- Improve: Execute auth actions directly instead of deferring to separate hook (more reliable)
+- Improve: Color-coded debug logs (red for errors, green for success, blue for already logged in)
 
 ### 2.1.1
 - Improve: Refactored code for simplicity and maintainability (reduced file size by ~30%)
