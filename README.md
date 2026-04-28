@@ -5,7 +5,7 @@
 **Requires at least:** WordPress 6.3 (full PHP 8.0 support)  
 **Tested up to:** 6.9  
 **Requires PHP:** 8.0  
-**Stable tag:** 2.1.2  
+**Stable tag:** 2.1.3  
 **License:** GPL-2.0+  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -65,7 +65,6 @@ Debug logs appear on the settings page in a **scrollable box with color-coded me
 - ⚫ **Black**: Informational messages
 
 The last 100 debug events are stored. Use the **"Clear Debug Logs"** button to reset them.
-
 ---
 
 ## Frequently Asked Questions
@@ -85,6 +84,19 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 ---
 
 ## Changelog
+### 2.1.3
+- Security: Switch from cookie to header-only JWT transmission - eliminates XSS cookie theft vectors
+- Security: Add exp (expiration) claim validation with configurable leeway (default 5 seconds)
+- Security: Add CF-Ray header validation for defense-in-depth origin checking
+- Security: Add nbf (not before) claim validation to reject future-dated tokens
+- Security: Add iat (issued at) claim validation with future-date and age checks
+- Security: Add configurable max token age setting (default 24 hours) to prevent old token replay
+- Improve: Reduce JWT leeway from 60 seconds to 5 seconds (configurable, more secure default)
+- Improve: Add CF Connecting IP logging for audit trail on successful authentication
+- Improve: Enhanced debug logging for all JWT claim validations with timestamps
+- Improve: New "Security settings" section in admin with JWT validation parameters
+- Breaking Change: Removed cookie-based JWT support - only HTTP_CF_ACCESS_JWT_ASSERTION header is now used
+
 ### 2.1.2
 - Feature: Add built-in debug mode with real-time log display on settings page (works independently of WordPress WP_DEBUG)
 - Security: Enforce RS256 algorithm validation to prevent algorithm downgrade attacks
