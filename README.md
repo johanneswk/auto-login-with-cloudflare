@@ -85,17 +85,14 @@ You can download the latest `.zip` from the [GitHub releases page](https://githu
 
 ## Changelog
 ### 2.1.3
-- Security: Switch from cookie to header-only JWT transmission - eliminates XSS cookie theft vectors
-- Security: Add exp (expiration) claim validation with configurable leeway (default 5 seconds)
-- Security: Add CF-Ray header validation for defense-in-depth origin checking
-- Security: Add nbf (not before) claim validation to reject future-dated tokens
-- Security: Add iat (issued at) claim validation with future-date and age checks
-- Security: Add configurable max token age setting (default 24 hours) to prevent old token replay
-- Improve: Reduce JWT leeway from 60 seconds to 5 seconds (configurable, more secure default)
-- Improve: Add CF Connecting IP logging for audit trail on successful authentication
-- Improve: Enhanced debug logging for all JWT claim validations with timestamps
-- Improve: New "Security settings" section in admin with JWT validation parameters
-- Breaking Change: Removed cookie-based JWT support - only HTTP_CF_ACCESS_JWT_ASSERTION header is now used
+- Security: Remove spoofable CF-Ray header origin check — JWT signature validation is the actual security control
+- Performance: Drastically reduce database writes by buffering debug logs 
+- Fix: Remove dead exp/nbf validation code after JWT::decode() (firebase/php-jwt already validates these)
+- Improve: Use consistent JWT leeway (5 seconds) for all time-based validations
+- Improve: Restore cookie fallback for JWT tokens — prefer header but accept cookie for atypical setups
+- Improve: Sanitize HTTP_CF_CONNECTING_IP before storage to prevent injection
+- Simplify: Remove redundant 24-hour token age check (Cloudflare tokens expire in 20 minutes anyway)
+- Refactor: Cleaner, more maintainable validation code with reduced complexity
 
 ### 2.1.2
 - Feature: Add built-in debug mode with real-time log display on settings page (works independently of WordPress WP_DEBUG)

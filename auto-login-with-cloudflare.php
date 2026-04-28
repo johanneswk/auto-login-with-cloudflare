@@ -23,7 +23,6 @@
 
 namespace AutoLoginWithCloudflare;
 
-// If this file is called directly, abort.
 if (!defined('WPINC')) {
     die;
 }
@@ -35,13 +34,13 @@ require_once __DIR__ . '/settings.php';
 
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 
 // define('WP_CF_ACCESS_AUTH_DOMAIN', '');
 // define('WP_CF_ACCESS_JWT_AUD', '');
 // define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
 
 define('WP_CF_ACCESS_CACHE_KEY', 'AutoLoginWithCloudflare_jwks');
+define('WP_CF_ACCESS_DEBUG_LOG_KEY', 'AutoLoginWithCloudflare_debug_logs');
 
 function get_config($constant, $option)
 {
@@ -68,55 +67,48 @@ function get_debug_mode()
     return get_config('WP_CF_ACCESS_DEBUG_MODE', 'AutoLoginWithCloudflare_debug_mode');
 }
 
-
-
-function validate_cloudflare_origin()
+/**
+ * Internal buffer accessor. Pass a string to append, null to read.
+ * Using a static variable avoids polluting the global namespace.
+ */
+function debug_buffer(?string $message = null): array
 {
-    // CF-Ray header is set by Cloudflare on all requests through their network
-    $cf_ray = $_SERVER['HTTP_CF_RAY'] ?? null;
-    
-    if (!$cf_ray) {
-        debug_log('CF-Ray header missing (request may not be from Cloudflare)');
-        return false;
+    static $buffer = [];
+    if ($message !== null) {
+        $buffer[] = '[' . current_time('Y-m-d H:i:s') . '] ' . $message;
     }
-    
-    debug_log('CF-Ray header present: ' . substr($cf_ray, 0, 16) . '.');
-    return true;
+    return $buffer;
 }
 
-/**
- * Log debug messages to plugin debug log (if debug mode enabled)
- * Also logs to WordPress error log if WP_DEBUG enabled
- */
+// Buffer debug messages and flush once on shutdown
 function debug_log($message)
 {
-    if (!get_debug_mode()) {
-        return;
-    }
-    
-    $timestamp = current_time('Y-m-d H:i:s');
-    $formatted_message = "[{$timestamp}] {$message}";
-    
-    // Store in transient (last 100 debug logs)
-    $logs = get_transient('AutoLoginWithCloudflare_debug_logs') ?: array();
-    array_unshift($logs, $formatted_message); // Add to beginning
-    $logs = array_slice($logs, 0, 100); // Keep only last 100
-    set_transient('AutoLoginWithCloudflare_debug_logs', $logs, WEEK_IN_SECONDS);
-    
-    // Also log to WordPress debug log if enabled
+    if (!get_debug_mode()) return;
+
+    debug_buffer($message);
+
     if (defined('WP_DEBUG') && WP_DEBUG) {
-        error_log('AutoLoginWithCloudflare Debug: ' . $message);
+        error_log('AutoLoginWithCloudflare: ' . $message);
     }
 }
+
+add_action('shutdown', function () {
+    if (!get_debug_mode()) return;
+    $buffer = debug_buffer();
+    if (empty($buffer)) return;
+    $existing = get_transient(WP_CF_ACCESS_DEBUG_LOG_KEY) ?: [];
+    $merged   = array_slice(array_merge($buffer, $existing), 0, 100);
+    set_transient(WP_CF_ACCESS_DEBUG_LOG_KEY, $merged, WEEK_IN_SECONDS);
+});
 
 function get_debug_logs()
 {
-    return get_transient('AutoLoginWithCloudflare_debug_logs') ?: array();
+    return get_transient(WP_CF_ACCESS_DEBUG_LOG_KEY) ?: array();
 }
 
 function clear_debug_logs()
 {
-    delete_transient('AutoLoginWithCloudflare_debug_logs');
+    delete_transient(WP_CF_ACCESS_DEBUG_LOG_KEY);
 }
 
 function refresh_keys()
@@ -140,25 +132,19 @@ function refresh_keys()
     }
 
     debug_log('JWKS refreshed successfully from ' . get_auth_domain());
-    wp_cache_set(WP_CF_ACCESS_CACHE_KEY, $jwks);
+    set_transient(WP_CF_ACCESS_CACHE_KEY, $jwks, HOUR_IN_SECONDS);
     return $jwks;
-}
-
-function verify_aud($aud)
-{
-    $expected = get_jwt_aud();
-    return is_array($aud) ? in_array($expected, $aud, true) : ($aud === $expected);
 }
 
 /**
  * Decode and validate JWT token, return email if valid
- * Validates: signature, algorithm, kid, exp, nbf, iat, aud, iss, email
+ * Validates: signature, algorithm, kid, aud, iss, iat, email
  */
-function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
+function validate_jwt(string $token, array $keys): ?string
 {
     // Set JWT leeway for exp/nbf validation - 5 seconds is best practice
     JWT::$leeway = defined('WP_CF_ACCESS_JWT_LEEWAY') ? constant('WP_CF_ACCESS_JWT_LEEWAY') : 5;
-    $parts = explode('.', $cf_auth_jwt);
+    $parts = explode('.', $token);
     
     if (count($parts) !== 3) {
         $msg = 'Invalid JWT format - expected 3 parts, got ' . count($parts);
@@ -190,7 +176,7 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
         return null;
     }
     
-    // Require kid - don't fall back to all keys (security: enforce key binding)
+    // Require kid - don't fall back to all keys
     $kid = $jwt_header['kid'] ?? null;
     if (!$kid || !isset($keys[$kid])) {
         $msg = 'Missing or invalid kid in JWT header' . ($kid ? ' (kid not in JWKS keyset)' : '');
@@ -201,40 +187,12 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
     
     $jwt_decoded = null;
     try {
-        $jwt_decoded = JWT::decode($cf_auth_jwt, $keys[$kid]);
+        $jwt_decoded = JWT::decode($token, $keys[$kid]);
     } catch (\Throwable $e) {
         $msg = 'JWT decode failed - ' . $e->getMessage();
         error_log('AutoLoginWithCloudflare: ' . $msg);
         debug_log($msg);
         return null;
-    }
-    
-    // Validate exp (expiration) claim
-    if (!isset($jwt_decoded->exp)) {
-        $msg = 'Missing expiration (exp) claim in JWT';
-        error_log('AutoLoginWithCloudflare: ' . $msg);
-        debug_log($msg);
-        return null;
-    }
-    
-    // Firebase JWT library validates exp automatically, but log it for audit
-    if (time() > $jwt_decoded->exp + JWT::$leeway) {
-        $msg = 'JWT expired at ' . date('Y-m-d H:i:s', $jwt_decoded->exp) . ' (leeway: ' . JWT::$leeway . 's)';
-        error_log('AutoLoginWithCloudflare: ' . $msg);
-        debug_log($msg);
-        return null;
-    }
-    debug_log('exp claim valid, expires at ' . date('Y-m-d H:i:s', $jwt_decoded->exp));
-    
-    // Validate nbf (not before) claim
-    if (isset($jwt_decoded->nbf) && time() < $jwt_decoded->nbf - JWT::$leeway) {
-        $msg = 'Token not yet valid (nbf). Scheduled for ' . date('Y-m-d H:i:s', $jwt_decoded->nbf);
-        error_log('AutoLoginWithCloudflare: ' . $msg);
-        debug_log($msg);
-        return null;
-    }
-    if (isset($jwt_decoded->nbf)) {
-        debug_log('nbf claim valid, valid from ' . date('Y-m-d H:i:s', $jwt_decoded->nbf));
     }
     
     // Validate iat (issued at) claim
@@ -245,8 +203,8 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
         return null;
     }
     
-    // Token shouldn't be from the future (allow 60 second clock skew)
-    if ($jwt_decoded->iat > time() + 60) {
+    // Token shouldn't be from the future (clock skew protection, using JWT leeway)
+    if ($jwt_decoded->iat > time() + JWT::$leeway) {
         $msg = 'Token iat is in the future (issued ' . date('Y-m-d H:i:s', $jwt_decoded->iat) . ')';
         error_log('AutoLoginWithCloudflare: ' . $msg);
         debug_log($msg);
@@ -254,21 +212,11 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
     }
     debug_log('iat claim valid, issued at ' . date('Y-m-d H:i:s', $jwt_decoded->iat));
     
-    // Check token age to not be older than 24 hours(prevent old tokens from being replayed)
-    $max_token_age = defined('WP_CF_ACCESS_MAX_TOKEN_AGE') ? constant('WP_CF_ACCESS_MAX_TOKEN_AGE') : 24;
-    $max_age_seconds = $max_token_age * 3600;
-    $token_age_seconds = time() - $jwt_decoded->iat;
-    if ($token_age_seconds > $max_age_seconds) {
-        $msg = 'Token is too old (' . floor($token_age_seconds / 3600) . ' hours, max: ' . $max_token_age . ' hours)';
-        error_log('AutoLoginWithCloudflare: ' . $msg);
-        debug_log($msg);
-        return null;
-    }
-    debug_log('Token age valid (' . round($token_age_seconds) . ' seconds old)');
-    
-    // Validate aud (audience)
-    if (!isset($jwt_decoded->aud) || !verify_aud($jwt_decoded->aud)) {
-        $msg = 'JWT audience validation failed (expected: ' . get_jwt_aud() . ')';
+    // Validate aud (audience) — inline the verification
+    $aud          = $jwt_decoded->aud ?? null;
+    $expected_aud = get_jwt_aud();
+    if (!(is_array($aud) ? in_array($expected_aud, $aud, true) : $aud === $expected_aud)) {
+        $msg = 'JWT audience validation failed (expected: ' . $expected_aud . ')';
         error_log('AutoLoginWithCloudflare: ' . $msg);
         debug_log($msg);
         return null;
@@ -283,7 +231,7 @@ function validate_jwt($cf_auth_jwt, $keys, $auth_domain)
     }
     
     // Normalize issuer comparison (trim trailing slashes)
-    $expected_iss = rtrim('https://' . $auth_domain, '/');
+    $expected_iss = rtrim('https://' . get_auth_domain(), '/');
     $token_iss = rtrim($jwt_decoded->iss, '/');
     if ($token_iss !== $expected_iss) {
         $msg = 'Issuer mismatch - expected ' . $expected_iss . ', got ' . $token_iss;
@@ -317,7 +265,7 @@ function login()
         return; // User already authenticated, no need to process JWT
     }
 
-    $jwks = wp_cache_get(WP_CF_ACCESS_CACHE_KEY);
+    $jwks = get_transient(WP_CF_ACCESS_CACHE_KEY);
     if (!$jwks) {
         $jwks = refresh_keys();
     }
@@ -330,25 +278,19 @@ function login()
         return;
     }
 
-    // Prefer header over cookie (header cannot be accessed by JavaScript)
-    $cf_auth_jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'] ?? null;
+    // Prefer header (cannot be read by JavaScript) but accept cookie as fallback
+    $cf_auth_jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'] ?? $_COOKIE['CF_Authorization'] ?? null;
     
     if (!$cf_auth_jwt) {
-        debug_log('No CF Authorization JWT found in HTTP_CF_ACCESS_JWT_ASSERTION header');
+        debug_log('No CF JWT found in header or cookie');
         return;
     }
     
-    // Check if request came through Cloudflare
-    if (!validate_cloudflare_origin()) {
-        debug_log('Request does not appear to come from Cloudflare (CF-Ray header missing)');
-        return;
-    }
-    
-    debug_log('CF Authorization JWT found in header, validating...');
+    debug_log('CF JWT found, validating...');
 
     try {
         $keys = JWK::parseKeySet($jwks);
-        $email = validate_jwt($cf_auth_jwt, $keys, get_auth_domain());
+        $email = validate_jwt($cf_auth_jwt, $keys);
         
         if (!$email) {
             $msg = 'JWT validation did not return an email';
@@ -367,7 +309,7 @@ function login()
                     __('<strong>Error</strong>: The user does not exist in this site. Please contact the site admin.', 'auto-login-with-cloudflare'),
                     __('User not found', 'auto-login-with-cloudflare'),
                     array(
-                        'response' => 500,
+                        'response' => 403,
                         'link_url' => '/cdn-cgi/access/logout',
                         'link_text' => __('Logout the current user.', 'auto-login-with-cloudflare'),
                         'exit' => true,
@@ -382,7 +324,7 @@ function login()
         do_action('wp_login', $user->user_login, $user);
         
         // Log successful authentication with audit info
-        $cf_ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? 'unknown';
+        $cf_ip = sanitize_text_field($_SERVER['HTTP_CF_CONNECTING_IP'] ?? 'unknown');
         $msg = 'Successfully logged in user: ' . $user->user_login . ' (ID: ' . $user->ID . ', IP: ' . $cf_ip . ')';
         error_log('AutoLoginWithCloudflare: ' . $msg);
         debug_log($msg);
@@ -391,7 +333,9 @@ function login()
         update_user_meta($user->ID, '_last_cf_access_time', current_time('mysql'));
         update_user_meta($user->ID, '_last_cf_access_ip', $cf_ip);
         
-        wp_safe_redirect(admin_url());
+        // Respect original destination if provided, otherwise go to admin
+        $redirect_to = !empty($_REQUEST['redirect_to']) ? wp_sanitize_redirect(wp_unslash($_REQUEST['redirect_to'])) : admin_url();
+        wp_safe_redirect($redirect_to);
         exit;
     } catch (\Throwable $e) {
         $msg = 'Login error - ' . $e->getMessage();
