@@ -171,7 +171,7 @@ add_action('admin_menu', function () {
                             echo '<p style="color: #999; font-style: italic;">' . __('No debug logs yet. Trigger the authentication flow to see logs.', 'auto-login-with-cloudflare') . '</p>';
                         else:
                             echo '<div style="background: #fff; padding: 15px; border: 1px solid #ccc; border-radius: 3px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.5;">';
-                            foreach ($debug_logs as $log):
+                            foreach (array_reverse($debug_logs) as $log):
                                 // Color-code log levels
                                 $color = '#000';
                                 $bg_color = 'transparent';
