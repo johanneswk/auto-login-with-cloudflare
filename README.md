@@ -38,6 +38,7 @@ define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
 The plugin settings page allows you to configure your Cloudflare Access credentials and enable debug mode for troubleshooting:
 
 ![Cloudflare Access Auto Login Settings Page](https://raw.githubusercontent.com/johanneswk/auto-login-with-cloudflare/main/assets/screenshot-settings.png)
+
 **Features shown:**
 - Auth domain configuration
 - Application audience (AUD) tag from Cloudflare
