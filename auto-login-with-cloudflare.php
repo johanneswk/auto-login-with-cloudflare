@@ -282,7 +282,6 @@ function login()
     $cf_auth_jwt = $_SERVER['HTTP_CF_ACCESS_JWT_ASSERTION'] ?? $_COOKIE['CF_Authorization'] ?? null;
     
     if (!$cf_auth_jwt) {
-        debug_log('No CF JWT found in header or cookie');
         return;
     }
     
