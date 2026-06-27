@@ -13,6 +13,7 @@ function settings_init()
     register_setting('AutoLoginWithCloudflare', 'AutoLoginWithCloudflare_aud');
     register_setting('AutoLoginWithCloudflare', 'AutoLoginWithCloudflare_redirect_login_page');
     register_setting('AutoLoginWithCloudflare', 'AutoLoginWithCloudflare_debug_mode');
+    register_setting('AutoLoginWithCloudflare', 'AutoLoginWithCloudflare_allowed_groups');
 
     add_settings_section(
         'AutoLoginWithCloudflare_section_general',
@@ -53,6 +54,18 @@ function settings_init()
         'AutoLoginWithCloudflare_section_general',
         array(
             'label_for' => 'AutoLoginWithCloudflare_field_redirect_login_page',
+            'class' => 'AutoLoginWithCloudflare_row',
+        )
+    );
+
+    add_settings_field(
+        'AutoLoginWithCloudflare_field_allowed_groups',
+        __('Allowed groups', 'auto-login-with-cloudflare'),
+        __NAMESPACE__ . '\\field_allowed_groups_cb',
+        'AutoLoginWithCloudflare',
+        'AutoLoginWithCloudflare_section_general',
+        array(
+            'label_for' => 'AutoLoginWithCloudflare_field_allowed_groups',
             'class' => 'AutoLoginWithCloudflare_row',
         )
     );
@@ -125,6 +138,12 @@ function field_aud_cb($args)
 function field_redirect_login_page_cb($args)
 {
     render_checkbox_field('AutoLoginWithCloudflare_redirect_login_page', 'WP_CF_ACCESS_REDIRECT_LOGIN', 'AutoLoginWithCloudflare_redirect_login_page', $args);
+}
+
+function field_allowed_groups_cb($args)
+{
+    render_text_field('AutoLoginWithCloudflare_allowed_groups', 'WP_CF_ACCESS_ALLOWED_GROUPS', 'AutoLoginWithCloudflare_allowed_groups', $args);
+    echo '<p class="description">' . esc_html__('Comma-separated group names or IDs. Leave empty to allow any authenticated user.', 'auto-login-with-cloudflare') . '</p>';
 }
 
 function field_debug_mode_cb($args)

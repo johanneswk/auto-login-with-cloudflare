@@ -9,14 +9,14 @@
  * Plugin Name:        Auto Login with Cloudflare
  * Plugin URI:         https://github.com/johanneswk/auto-login-with-cloudflare
  * Description:        Allow login to Wordpress when using Cloudflare Access.
- * Version:            2.1.3
+ * Version:            2.2.0
  * Author:             Johannes Kistemaker
  * Author URI:         https://github.com/johanneswk/
  * License:            GPL-2.0+
  * License URI:        http://www.gnu.org/licenses/gpl-2.0.txt
  * Requires at least:  6.3
  * Requires PHP:       8.0
- * Tested up to:       6.9
+ * Tested up to:       7.0
  * Text Domain:        auto-login-with-cloudflare
  * Domain Path:        /languages
  */
@@ -38,6 +38,7 @@ use Firebase\JWT\JWT;
 // define('WP_CF_ACCESS_AUTH_DOMAIN', '');
 // define('WP_CF_ACCESS_JWT_AUD', '');
 // define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
+// define('WP_CF_ACCESS_ALLOWED_GROUPS', 'Group Name,group-id-guid');
 
 define('WP_CF_ACCESS_CACHE_KEY', 'AutoLoginWithCloudflare_jwks');
 define('WP_CF_ACCESS_DEBUG_LOG_KEY', 'AutoLoginWithCloudflare_debug_logs');
@@ -65,6 +66,48 @@ function get_redirect_login()
 function get_debug_mode()
 {
     return get_config('WP_CF_ACCESS_DEBUG_MODE', 'AutoLoginWithCloudflare_debug_mode');
+}
+
+function get_allowed_groups_raw()
+{
+    return get_config('WP_CF_ACCESS_ALLOWED_GROUPS', 'AutoLoginWithCloudflare_allowed_groups');
+}
+
+function parse_csv_values($value)
+{
+    if (!is_string($value) || $value === '') {
+        return array();
+    }
+
+    $items = array_map('trim', explode(',', $value));
+    $items = array_filter($items, function ($item) {
+        return $item !== '';
+    });
+
+    return array_values(array_unique($items));
+}
+
+function normalize_group_values(array $groups)
+{
+    $normalized = array();
+
+    foreach ($groups as $group) {
+        if (!is_string($group)) {
+            continue;
+        }
+
+        $value = strtolower(trim($group));
+        if ($value !== '') {
+            $normalized[] = $value;
+        }
+    }
+
+    return array_values(array_unique($normalized));
+}
+
+function get_allowed_groups()
+{
+    return parse_csv_values((string) get_allowed_groups_raw());
 }
 
 /**
@@ -252,6 +295,97 @@ function validate_jwt(string $token, array $keys): ?string
     return $jwt_decoded->email;
 }
 
+/**
+ * Queries the Cloudflare Access Edge to retrieve the current user's IdP groups.
+ * 
+ * @param string $jwt_token The JWT token for the current user.
+ * @return array List of assigned group names, or an empty array on failure.
+ */
+function get_cloudflare_edge_groups( $jwt_token ) {
+
+    // 2. Build the protected edge identity URL
+    $endpoint = "https://" . get_auth_domain() . "/cdn-cgi/access/get-identity";
+    debug_log( 'Fetching Cloudflare identity from: ' . $endpoint );
+    debug_log( 'CF_Authorization token length: ' . strlen( (string) $jwt_token ) );
+
+    // 3. Request the identity profile using the JWT cookie signature
+    $response = wp_remote_get( $endpoint, array(
+        'headers' => array(
+            'Cookie' => 'CF_Authorization=' . $jwt_token
+        ),
+        'timeout' => 5
+    ) );
+
+    if ( is_wp_error( $response ) ) {
+        debug_log( 'Cloudflare identity request failed: ' . $response->get_error_message() );
+        return array();
+    }
+
+    $status_code = wp_remote_retrieve_response_code( $response );
+    $raw_body = wp_remote_retrieve_body( $response );
+    debug_log( 'Cloudflare identity status code: ' . $status_code );
+
+    // 4. Extract and return the inner IDP groups list
+    if ( $status_code === 200 ) {
+        $body = json_decode( $raw_body, true );
+
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            debug_log( 'Cloudflare identity JSON parse error: ' . json_last_error_msg() );
+            debug_log( 'Cloudflare identity raw body: ' . $raw_body );
+            return array();
+        }
+
+        if ( ! is_array( $body ) ) {
+            debug_log( 'Cloudflare identity response is not an object/array. Raw body: ' . $raw_body );
+            return array();
+        }
+
+        // Cloudflare may return groups in either body.groups or body.idp.groups.
+        $groups_raw = null;
+        if ( isset( $body['groups'] ) && is_array( $body['groups'] ) ) {
+            $groups_raw = $body['groups'];
+            debug_log( 'Cloudflare identity groups source: groups' );
+        } elseif ( isset( $body['idp']['groups'] ) && is_array( $body['idp']['groups'] ) ) {
+            $groups_raw = $body['idp']['groups'];
+            debug_log( 'Cloudflare identity groups source: idp.groups' );
+        }
+
+        if ( is_array( $groups_raw ) ) {
+            $groups = array();
+
+            foreach ( $groups_raw as $group ) {
+                if ( is_string( $group ) && $group !== '' ) {
+                    $groups[] = $group;
+                    continue;
+                }
+
+                if ( is_array( $group ) ) {
+                    if ( isset( $group['name'] ) && is_string( $group['name'] ) && $group['name'] !== '' ) {
+                        $groups[] = $group['name'];
+                    }
+
+                    if ( isset( $group['id'] ) && is_string( $group['id'] ) && $group['id'] !== '' ) {
+                        $groups[] = $group['id'];
+                    }
+                }
+            }
+
+            $groups = array_values( array_unique( $groups ) );
+            debug_log( 'Cloudflare identity groups normalized. Raw count: ' . count( $groups_raw ) . ', normalized count: ' . count( $groups ) );
+            return $groups;
+        }
+
+        debug_log( 'Cloudflare identity has no idp.groups. Top-level keys: ' . implode( ', ', array_keys( $body ) ) );
+        debug_log( 'Cloudflare identity payload: ' . wp_json_encode( $body ) );
+        return array();
+    }
+
+    debug_log( 'Cloudflare identity non-200 response. Body: ' . $raw_body );
+
+    return array();
+}
+
+
 // Called on wp_loaded hook to handle Cloudflare Access JWT authentication
 function login()
 {
@@ -285,6 +419,36 @@ function login()
         return;
     }
     
+    $groups = get_cloudflare_edge_groups($cf_auth_jwt);
+    debug_log('Retrieved Cloudflare Edge groups: ' . implode(', ', $groups));
+
+    $allowed_groups = get_allowed_groups();
+    if (!empty($allowed_groups)) {
+        $normalized_user_groups = normalize_group_values($groups);
+        $normalized_allowed_groups = normalize_group_values($allowed_groups);
+        $matched_groups = array_values(array_intersect($normalized_user_groups, $normalized_allowed_groups));
+
+        debug_log('Allowed groups configured: ' . implode(', ', $allowed_groups));
+        debug_log('Matched allowed groups count: ' . count($matched_groups));
+
+        if (empty($matched_groups)) {
+            $msg = 'Access denied - user is not in any allowed Cloudflare/Azure group';
+            error_log('AutoLoginWithCloudflare: ' . $msg);
+            debug_log($msg);
+            wp_die(
+                __('<strong>Error</strong>: Your account is not in an allowed access group.', 'auto-login-with-cloudflare'),
+                __('Access denied', 'auto-login-with-cloudflare'),
+                array(
+                    'response' => 403,
+                    'link_url' => '/cdn-cgi/access/logout',
+                    'link_text' => __('Logout the current user.', 'auto-login-with-cloudflare'),
+                    'exit' => true,
+                )
+            );
+            return;
+        }
+    }
+
     debug_log('CF JWT found, validating...');
 
     try {

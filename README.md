@@ -3,7 +3,7 @@
 **Contributors:** [johanneswk](https://github.com/johanneswk), [kanru](https://github.com/kanru)  
 **Tags:** cloudflare, jwt, login, sso, composer  
 **Requires at least:** WordPress 6.3 (full PHP 8.0 support)  
-**Tested up to:** 6.9  
+**Tested up to:** 7.0  
 **Requires PHP:** 8.0  
 **Stable tag:** 2.1.3  
 **License:** GPL-2.0+  
@@ -17,6 +17,8 @@ A simple way to allow single sign-on to your WordPress site when using Cloudflar
 
 Enable Cloudflare Access self-hosted application to protect your `/wp-admin` folder. Add your auth domain and aud settings from Cloudflare Access. Authenticated users will be automatically logged in to WordPress if their email address matches.
 
+You can optionally restrict login to specific Cloudflare Access or Azure groups by configuring a comma-separated allow list of group names and/or group IDs. If the allowed groups setting is empty, any authenticated user with a matching WordPress email address can log in.
+
 Follow [Cloudflare documentation](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) to set up Access.
 
 You can also define configs in `wp-config.php`:
@@ -25,7 +27,18 @@ You can also define configs in `wp-config.php`:
 define('WP_CF_ACCESS_AUTH_DOMAIN', 'yourdomain.cloudflareaccess.com');
 define('WP_CF_ACCESS_JWT_AUD', 'examplef2nat0rkar2866wn829a0x2ztdg');
 define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
+define('WP_CF_ACCESS_ALLOWED_GROUPS', 'Group Name,00000000-0000-0000-0000-000000000000');
 ```
+
+### Allowed Groups
+
+The **Allowed groups** setting accepts a comma-separated list of group names or group IDs.
+
+Examples:
+- `Management, Editors, 0da61a19-5df6-459d-a2ae-333de9bd19b7`
+- `Access Website: Zeal, d78b9201-6e83-4706-b31b-048afa792181`
+
+Matching is case-insensitive. The plugin checks the groups returned by Cloudflare Access and grants access if the user matches at least one configured group by name or ID.
 
 > This plugin is not affiliated with nor developed by Cloudflare. All trademarks, service marks and company names are the property of their respective owners.
 
@@ -43,6 +56,7 @@ The plugin settings page allows you to configure your Cloudflare Access credenti
 - Auth domain configuration
 - Application audience (AUD) tag from Cloudflare
 - Redirect login page option
+- Allowed groups restriction
 - Debug mode toggle with real-time log display
 
 ---
@@ -83,6 +97,10 @@ The option assumes that the `/wp-admin` folder is protected by Cloudflare Access
 You can download the latest `.zip` from the [GitHub releases page](https://github.com/johanneswk/auto-login-with-cloudflare/releases) and upload it via the WordPress plugin installer. No Composer required for end users.
 
 ---
+
+## Changelog
+### 2.2.0
+- Feature: Add optional allowed groups setting with support for comma-separated Cloudflare Access or Azure group names and IDs
 
 ## Changelog
 ### 2.1.3
