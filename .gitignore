@@ -1,3 +1,6 @@
 /.vscode
 languages/*.mo
 languages/*.po~
+.DS_Store
+/vendor/
+/dist/

@@ -1,70 +1,90 @@
-=== Auto Login with Cloudflare ===
-Contributors: kanru
-Tags: cloudflare,jwt,login
-Donate link: https://www.buymeacoffee.com/kanru
-Requires at least: 5.0
-Tested up to: 6.1.1
-Requires PHP: 5.3
-Stable tag: 1.1.4
-License: GPL-2.0+
-License URI: http://www.gnu.org/licenses/gpl-2.0.txt
+=== Auto Login for Cloudflare Access ===
+Contributors: johanneswk
+Tags: cloudflare access, sso, login, zero trust, jwt
+Requires at least: 6.3
+Tested up to: 7.1
+Requires PHP: 8.0
+Stable tag: 1.0.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Super simple way to allow a single sign on to your Wordpress site when using Cloudflare Access.
+Single sign-on for WordPress behind Cloudflare Access: users who passed Access are logged in automatically by email address.
 
 == Description ==
-Enable Cloudflare Access self-hosted application to protect your `/wp-admin` folder. Add your auth domain and aud settings from Cloudflare Access. Authenticated user will be automatically logined to Wordpress if their email address matches.
 
-Follow [Cloudflare document](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) to setup Access.
+Protect `/wp-admin` (or your whole site) with a Cloudflare Access self-hosted application. When a visitor has signed in through Access, this plugin verifies the Access token (JWT) that Cloudflare sends with every request and logs the visitor in to the WordPress account with the same email address.
 
-You can also define configs in `wp-config.php`
+* No passwords: users sign in with any identity provider configured in Cloudflare Access.
+* Strict token validation: RS256 signature against Cloudflare's published keys, expiry, audience (AUD) and issuer are all checked.
+* Handles Cloudflare's signing key rotation automatically.
+* Optional redirect of `wp-login.php` to Cloudflare Access, and logout from Access when logging out of WordPress.
+* Built-in debug log on the settings page for troubleshooting.
+* Settings can be locked in `wp-config.php`.
 
-    define('WP_CF_ACCESS_AUTH_DOMAIN', 'yourdomain.cloudflareaccess.com');
-    define('WP_CF_ACCESS_JWT_AUD', 'examplef2nat0rkar2866wn829a0x2ztdg');
-    define('WP_CF_ACCESS_REDIRECT_LOGIN', true);
+Users are never created: the email address must already belong to a WordPress user.
 
-This plugin is not affiliated with nor developed by Cloudflare. All trademarks, service marks and company names are the property of their respective owners.
+This plugin is a fork of "Auto Login with Cloudflare" by Kan-Ru Chen, which is no longer available. When you activate this plugin, the settings of that plugin are copied over; deactivate and delete the old plugin afterwards.
+
+This plugin is not affiliated with or endorsed by Cloudflare, Inc. Cloudflare and Cloudflare Access are trademarks of Cloudflare, Inc.
+
+Development happens on [GitHub](https://github.com/johanneswk/auto-login-for-cloudflare-access).
+
+== Installation ==
+
+1. In Cloudflare Zero Trust, create a self-hosted Access application that protects at least `/wp-admin` of your site. See the [Cloudflare documentation](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/).
+2. Install and activate the plugin.
+3. Go to **Settings → Auto Login for Cloudflare Access** and enter:
+   * **Auth domain**: your team domain, for example `yourteam.cloudflareaccess.com`.
+   * **Application audience (AUD) tag**: found in the Access application's overview.
+4. Optionally enable **Redirect login page** so `wp-login.php` sends users through Cloudflare Access.
+
+Instead of using the settings page you can define the values in `wp-config.php`. Defined values take precedence and cannot be changed from the admin:
+
+`define('WP_CF_ACCESS_AUTH_DOMAIN', 'yourteam.cloudflareaccess.com');`
+`define('WP_CF_ACCESS_JWT_AUD', 'your-aud-tag');`
+`define('WP_CF_ACCESS_REDIRECT_LOGIN', true);`
+`define('WP_CF_ACCESS_DEBUG_MODE', false);`
 
 == Frequently Asked Questions ==
 
-= How do I redirect the WP login page at `/wp-login.php` to Cloudflare Access? =
+= A user is not logged in. How do I find out why? =
 
-Enable the "Redirect login page" option and all future logins will be redirected to `/wp-admin` and trigger Access authentication.
+Enable debug mode on the settings page and reload a protected page. Every step of the validation is shown in the debug log. Authentication failures are also written to the PHP error log.
 
-= Why do I get infinite redirect loop after enabling the redirect login page option? =
+= How do I send the WordPress login page to Cloudflare Access? =
 
-The option assumes that `/wp-admin` folder is protected by Cloudflare Access. If the folder is not protected, then auto-login will fail and redirect back to the login page, causing the redirect loop.
+Enable **Redirect login page**. Visitors to `wp-login.php` are redirected to `/wp-admin/`, where Cloudflare Access asks them to sign in. Make sure your Access application protects `/wp-admin`, otherwise this causes a redirect loop.
+
+= Is my server still reachable without Cloudflare? =
+
+That depends on your hosting. Tokens are always verified, but for the best protection only allow traffic to your server from Cloudflare, for example with Cloudflare Tunnel or a firewall allowlist.
+
+= Does the plugin create WordPress users? =
+
+No. The email address from Cloudflare Access must match an existing user.
+
+= What data does the debug log store? =
+
+Up to 100 recent messages, including email addresses, user names and IP addresses, for at most one week. Clear it with the **Clear Debug Logs** button. Everything is removed when the plugin is deleted.
 
 == Screenshots ==
-1. Settings 
+
+1. Settings page with debug mode and the debug log.
+
+== External services ==
+
+This plugin connects to Cloudflare Access, a service by Cloudflare, Inc., to verify that a visitor has signed in.
+
+When a request carries a Cloudflare Access token, the plugin downloads the public signing keys of your Access team from `https://<your auth domain>/cdn-cgi/access/certs`. The keys are cached for up to one hour. Only this request is made; no visitor or site data is sent to Cloudflare by the plugin. Your site is already behind Cloudflare Access, which handles the sign-in itself.
+
+* Cloudflare Website and Online Services Terms of Use: https://www.cloudflare.com/website-terms/
+* Cloudflare Privacy Policy: https://www.cloudflare.com/privacypolicy/
 
 == Changelog ==
 
-= 1.1.4 =
-* Fix redirect issue for non-default wp-admin urls
-
-= 1.1.3 =
-* Tested with WordPress 6.1.1
-
-= 1.1.2 =
-* Tested with WordPress 5.9
-* Fixed errors when activated in multi-site enabled installation
-
-= 1.1.1 =
-* Show an error message when user does not exist to prevent redirect loop
-
 = 1.0.0 =
-* Tested with WordPress 5.8
-* Update php-jwt to 5.4
-* Stable. No major change planned
-
-= 0.9.3 =
-* Tested with WordPress 5.7
-
-= 0.9.2 =
-* update minimum requirements
-* update php-jwt to 5.2.1
-
-= 0.9.0 =
-* First beta release.
-
-== Upgrade Notice ==
+* First release in the WordPress.org directory, continuing "Auto Login with Cloudflare" by Kan-Ru Chen.
+* Settings of the original plugin are copied over on activation.
+* Strict Cloudflare Access token validation with firebase/php-jwt 7.2.2: RS256 signature, required expiry, audience, issuer and email.
+* Automatic handling of Cloudflare signing key rotation and outages.
+* Validated settings, debug log on the settings page, and full cleanup when the plugin is deleted.

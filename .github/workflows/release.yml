@@ -1,0 +1,89 @@
+name: Build plugin zip
+
+# Every push builds a test build and publishes it as a pre-release for the plugin's version.
+# To publish a stable release: Actions -> "Build plugin zip" -> Run workflow -> tick "stable".
+# Once a version is stable, pushes no longer touch it; bump "Version:" for the next build.
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      stable:
+        description: 'Publish this version as a stable release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases and move the version tag
+    env:
+      SLUG: auto-login-for-cloudflare-access
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      STABLE: ${{ inputs.stable || false }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Read plugin version
+        run: |
+          version=$(awk -F': ' '/^\s*\* Version:/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}' "$SLUG.php")
+          [ -n "$version" ] || { echo "::error::No Version header found"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build zip
+        run: |
+          mkdir -p "dist/$SLUG"
+          shopt -s extglob
+          # WordPress.org gets readme.txt; README.md and assets/ are for GitHub only.
+          cp -r !(dist|README.md|assets) "dist/$SLUG/"
+          (cd dist && zip -qr "../$SLUG-$VERSION.zip" "$SLUG")
+
+      - name: Publish release
+        run: |
+          zip="$SLUG-$VERSION.zip"
+          state=$(gh release view "$VERSION" --json isPrerelease --jq .isPrerelease 2>/dev/null || echo none)
+
+          if [ "$state" = false ]; then
+            echo "::warning::$VERSION is already a stable release and was left untouched. Bump the Version header for a new build."
+            exit 0
+          fi
+
+          if [ "$state" = none ]; then
+            if [ "$STABLE" = true ]; then
+              gh release create "$VERSION" "$zip" --target "$GITHUB_SHA" --title "$VERSION" --generate-notes --latest
+            else
+              gh release create "$VERSION" "$zip" --target "$GITHUB_SHA" --title "$VERSION (test build)" --prerelease \
+                --notes "Automated test build from ${GITHUB_SHA::7}. Not a stable release."
+            fi
+            exit 0
+          fi
+
+          # An existing pre-release: point its tag at this commit, then refresh or promote it.
+          git tag -f "$VERSION" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$VERSION"
+          gh release upload "$VERSION" "$zip" --clobber
+          if [ "$STABLE" = true ]; then
+            gh release edit "$VERSION" --title "$VERSION" --prerelease=false --latest \
+              --notes "Stable release $VERSION. See the changelog in readme.txt."
+          else
+            gh release edit "$VERSION" --notes "Automated test build from ${GITHUB_SHA::7}. Not a stable release."
+          fi
